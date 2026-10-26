@@ -60,13 +60,17 @@ def relogio_minutos():
     kb.append([InlineKeyboardButton("⬅️ Voltar", callback_data="hora_voltar")]); return InlineKeyboardMarkup(kb)
 
 async def reset_cmd(u,c):
-    conn=sqlite3.connect(DB_PATH); cur=conn.cursor(); cur.execute("SELECT chapa FROM cadastro WHERE telegram_id=?", (u.effective_user.id,)); row=cur.fetchone()
+    conn=sqlite3.connect(DB_PATH); cur=conn.cursor()
+    cur.execute("SELECT chapa FROM cadastro WHERE telegram_id=?", (u.effective_user.id,))
+    row=cur.fetchone()
     if not row or row[0]!=ADM_CHAPA:
-        cur.execute("SELECT COUNT(*) FROM cadastro"); 
-        try: cnt=cur.fetchone()[0]
-        except: cnt=0
-        if cnt>0: await u.message.reply_text("❌ Só ADM 062289"); conn.close(); return
-    conn.close(); kb=InlineKeyboardMarkup([[InlineKeyboardButton("✅ SIM, APAGAR TUDO", callback_data="reset_sim")],[InlineKeyboardButton("❌ NÃO", callback_data="reset_nao")]])
+        cur.execute("SELECT COUNT(*) FROM cadastro")
+        result = cur.fetchone()
+        count = result[0] if result else 0
+        if count>0:
+            await u.message.reply_text("❌ Só ADM 062289"); conn.close(); return
+    conn.close()
+    kb=InlineKeyboardMarkup([[InlineKeyboardButton("✅ SIM, APAGAR TUDO", callback_data="reset_sim")],[InlineKeyboardButton("❌ NÃO", callback_data="reset_nao")]])
     await u.message.reply_text(f"⚠️ ADM {ADM_CHAPA}\nAPAGAR TUDO?", reply_markup=kb)
 
 async def reset_confirm(u,c):
