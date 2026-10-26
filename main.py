@@ -41,13 +41,14 @@ def salvar_cadastro(chapa, nome, sobrenome, telefone, tid):
         w.writeheader(); w.writerows(rows)
 
 def montar_calendario(ano, mes):
+    calendar.setfirstweekday(calendar.SUNDAY) # COMEÇA NO DOMINGO
     hoje=datetime.date.today()
     limite_futuro=hoje+datetime.timedelta(days=1)
     limite_passado=hoje-datetime.timedelta(days=7)
     cal=calendar.monthcalendar(ano, mes)
     botoes=[]
     botoes.append([InlineKeyboardButton(f"📅 {calendar.month_name[mes]} {ano}", callback_data="IGNORE")])
-    botoes.append([InlineKeyboardButton(d, callback_data="IGNORE") for d in ["S","T","Q","Q","S","S"]])
+    botoes.append([InlineKeyboardButton(d, callback_data="IGNORE") for d in ["D","S","T","Q","Q","S","S"]])
     for semana in cal:
         linha=[]
         for dia in semana:
@@ -220,7 +221,6 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         total_decimal = 0
         total_hhmm = "00:00"
-
     nome = context.user_data.get("nome","").upper()
     sobrenome = context.user_data.get("sobrenome","").upper()
     chapa = context.user_data.get("chapa","")
@@ -231,12 +231,9 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     min_ini = context.user_data.get("min_ini","")
     hora_fim = context.user_data.get("hora_fim","")
     min_fim = context.user_data.get("min_fim","")
-
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm} ({total_decimal:.2f}h)\n"
-
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", f"{total_decimal:.2f}", total_hhmm, context.user_data.get("telefone","")])
-
     kb_final=InlineKeyboardMarkup([
         [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
         [InlineKeyboardButton(" ", callback_data="IGNORE")],
@@ -297,7 +294,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT FINAL CORRETO 07:10")
+            print(">>> BOT DOMINGO CORRIGIDO")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
