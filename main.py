@@ -1,5 +1,5 @@
 import os, threading, time, csv, datetime, calendar
-from flask import Flask, request
+from flask import Flask, request, send_file
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
 
@@ -27,8 +27,6 @@ def buscar_cadastro(chapa):
     return None
 
 def salvar_cadastro(chapa, nome, sobrenome, telefone, tid):
-    nome = nome.strip().upper()
-    sobrenome = sobrenome.strip().upper()
     rows=[]
     try:
         with open(ARQ_CAD, encoding="utf-8") as f:
@@ -72,13 +70,40 @@ def montar_calendario(ano, mes):
     return InlineKeyboardMarkup(botoes)
 
 app_flask=Flask(__name__)
+
 @app_flask.route('/')
 def home(): return "BOT ON"
+
 @app_flask.route('/base')
 def ver_base():
     inicio=request.args.get('inicio',''); fim=request.args.get('fim',''); chapa_f=request.args.get('chapa','')
-    html=f"""<style>body{{font-family:Arial;padding:15px}} table{{border-collapse:collapse;width:100%;font-size:13px}} th{{background:#111;color:white;padding:8px}} td{{padding:6px;border:1px solid #ccc}}</style>
-    <h2>BASE HE - NOMES EM MAIÚSCULO</h2><form method="get">Data Inicial: <input type="date" name="inicio" value="{inicio}"> Data Final: <input type="date" name="fim" value="{fim}"> CHAPA: <input type="text" name="chapa" value="{chapa_f}"><button>Filtrar</button> <a href="/base">Limpar</a></form><br>"""
+    
+    html=f"""
+    <style>
+    body{{font-family:Arial;padding:15px}}
+    table{{border-collapse:collapse;width:100%;font-size:13px}}
+    th{{background:#111;color:white;padding:8px}}
+    td{{padding:6px;border:1px solid #ccc}}
+    .btn{{padding:8px 15px; text-decoration:none; border-radius:5px; margin-right:8px; color:white; display:inline-block; font-size:13px; border:none; cursor:pointer}}
+    .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}}
+    </style>
+    <h2 style="font-weight:normal">base horas extra bho</h2>
+    <form method="get" style="margin-bottom:15px">
+      Data Inicial: <input type="date" name="inicio" value="{inicio}"> 
+      Data Final: <input type="date" name="fim" value="{fim}"> 
+      CHAPA: <input type="text" name="chapa" value="{chapa_f}">
+      <button class="btn btn-blue" type="submit">Filtrar</button> <a href="/base">Limpar filtro</a>
+    </form>
+    <div style="margin-bottom:15px">
+      <a href="/exportar" class="btn btn-green">📥 Extrair Base</a>
+      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Tem certeza que quer LIMPAR TODA A BASE? Essa ação não tem volta!')">🗑️ Limpar Base</a>
+    </div>
+    """
+    if request.args.get('limpar')=='1':
+        with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","telefone"])
+        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base limpa com sucesso!</div>"
+
     total_h=0; total_reg=0; linhas=[]
     try:
         with open(ARQ_HE, encoding="utf-8") as f:
@@ -94,12 +119,17 @@ def ver_base():
                 try: total_h+=float(str(r.get("total_horas","0")).replace(",","."))
                 except: pass
     except Exception as e: html+=f"Erro: {e}<br>"
-    html+=f"<b>Total: {total_reg} | Horas: {total_h:.2f}h</b><br><br><table><tr><th>Data Reg</th><th>Chapa</th><th>Nome Completo</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th></tr>"
+    
+    html+=f"<b>Total: {total_reg} | Horas: {total_h:.2f}h</b><br><br>"
+    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome Completo</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th></tr>"
     for r in reversed(linhas[-500:]):
-        nome = r.get('nome','').upper()
-        sobre = r.get('sobrenome','').upper()
-        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{nome} {sobre}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_horas','')}</td></tr>"
-    html+="</table>"; return html
+        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{r.get('nome','')} {r.get('sobrenome','')}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_horas','')}</td></tr>"
+    html+="</table>"
+    return html
+
+@app_flask.route('/exportar')
+def exportar():
+    return send_file(ARQ_HE, as_attachment=True, download_name="base_horas_extra_bho.csv")
 
 def run_flask(): app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
@@ -111,19 +141,15 @@ async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not (chapa.isdigit() and len(chapa)==6): await update.message.reply_text("CHAPA inválida. 6 dígitos:"); return CHAPA
     context.user_data["chapa"]=chapa
     cad=buscar_cadastro(chapa)
-    if cad: 
-        context.user_data.update(cad)
-        context.user_data["nome"]=cad["nome"].upper()
-        context.user_data["sobrenome"]=cad["sobrenome"].upper()
-        await update.message.reply_text(f"Bem vinda {cad['nome'].upper()}! Envie BA 7 dígitos:"); return BA
+    if cad: context.user_data.update(cad); await update.message.reply_text(f"Bem vinda {cad['nome']}! Envie BA 7 dígitos:"); return BA
     await update.message.reply_text("Seu NOME:"); return NOME
 
 async def nome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["nome"]=update.message.text.strip().upper()
+    context.user_data["nome"]=update.message.text.strip()
     await update.message.reply_text("Sobrenome:"); return SOBRENOME
 
 async def sobrenome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["sobrenome"]=update.message.text.strip().upper()
+    context.user_data["sobrenome"]=update.message.text.strip()
     kb=[[KeyboardButton("📱 Compartilhar telefone", request_contact=True)]]
     await update.message.reply_text("Compartilhe telefone:", reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)); return TELEFONE
 
@@ -137,7 +163,7 @@ async def ba_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ba=update.message.text.strip()
     if not (ba.isdigit() and len(ba)==7): await update.message.reply_text("BA inválido! 7 dígitos:"); return BA
     context.user_data["ba"]=ba; hoje=datetime.date.today()
-    await update.message.reply_text(f"BA {ba} ok! Data Inicial (últimos 7 dias até amanhã):", reply_markup=montar_calendario(hoje.year, hoje.month)); return DATA_INI
+    await update.message.reply_text(f"BA {ba} ok! Data Inicial:", reply_markup=montar_calendario(hoje.year, hoje.month)); return DATA_INI
 
 async def calendario_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer()
@@ -177,8 +203,7 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if total<=0: total+=24
     except: total=0
     context.user_data["total"]=f"{total:.2f}"
-    nome=context.user_data.get("nome","").upper()
-    sobrenome=context.user_data.get("sobrenome","").upper()
+    nome=context.user_data.get("nome",""); sobrenome=context.user_data.get("sobrenome","")
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {context.user_data['chapa']}\n📋 BA: {context.user_data['ba']}\n📅 Data Início: {context.user_data['data_inicio']}\n📅 Data Fim: {context.user_data['data_fim']}\n⏰ Hora Inicial: {context.user_data['hora_ini']}:{context.user_data['min_ini']}\n⏰ Hora Final: {context.user_data['hora_fim']}:{context.user_data['min_fim']}\n⏱️ Total: {context.user_data['total']}h\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), context.user_data["chapa"], nome, sobrenome, context.user_data["ba"], context.user_data["data_inicio"], context.user_data["data_fim"], f"{context.user_data['hora_ini']}:{context.user_data['min_ini']}", f"{context.user_data['hora_fim']}:{context.user_data['min_fim']}", context.user_data["total"], context.user_data.get("telefone","")])
@@ -237,7 +262,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT FINAL MAIUSCULO")
+            print(">>> BOT FINAL")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
