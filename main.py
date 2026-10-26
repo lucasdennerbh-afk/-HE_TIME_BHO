@@ -19,48 +19,26 @@ for arq, header in [
 
 CHAPA, NOME, SOBRENOME, TELEFONE, BA, DATA_INI, HORA_INI, MIN_INI, VIRADA, HORA_FIM, MIN_FIM = range(11)
 
-# ========== FUNÇÃO CORRIGIDA - NÃO DÁ MAIS NONE ==========
 def buscar_nome_na_base_mestra(chapa):
     try:
         chapa_6 = str(chapa).strip().zfill(6)
         chapa_sem_zero = str(int(chapa)) if str(chapa).strip().isdigit() else str(chapa).strip()
-        
         with open(ARQ_FUNC, encoding="utf-8-sig") as f:
             primeira_linha = f.readline()
             f.seek(0)
             delim = ";" if ";" in primeira_linha else ","
-            
             reader = csv.DictReader(f, delimiter=delim)
-            # NORMALIZA: CHAPA -> chapa, NOME COMPLETO -> nome_completo, tira BOM
             if reader.fieldnames:
                 reader.fieldnames = [c.strip().lower().replace(" ", "_").replace("\ufeff","") for c in reader.fieldnames]
-            
-            # descobre colunas
-            chapa_col = "chapa"
-            if "chapa" not in reader.fieldnames:
-                if "nk_chapa" in reader.fieldnames:
-                    chapa_col = "nk_chapa"
-                else:
-                    chapa_col = reader.fieldnames[0]
-            
-            nome_col = "nome_completo"
-            if "nome_completo" not in reader.fieldnames:
-                if "funcionario" in reader.fieldnames:
-                    nome_col = "funcionario"
-                elif "nome" in reader.fieldnames:
-                    nome_col = "nome"
-                else:
-                    nome_col = reader.fieldnames[1] if len(reader.fieldnames) > 1 else reader.fieldnames[0]
-
+            chapa_col = "chapa" if "chapa" in reader.fieldnames else reader.fieldnames[0]
+            nome_col = "nome_completo" if "nome_completo" in reader.fieldnames else ("funcionario" if "funcionario" in reader.fieldnames else reader.fieldnames[1])
             for r in reader:
                 val_chapa = str(r.get(chapa_col,"")).strip()
-                if not val_chapa or val_chapa.lower() == "none":
-                    continue
+                if not val_chapa or val_chapa.lower() == "none": continue
                 c = val_chapa.zfill(6)
-                if c == chapa_6 or val_chapa == str(chapa).strip() or val_chapa == chapa_sem_zero or val_chapa.lstrip("0") == chapa_sem_zero:
+                if c == chapa_6 or val_chapa == str(chapa).strip() or val_chapa == chapa_sem_zero:
                     nome_full = str(r.get(nome_col,"")).strip().upper()
-                    if not nome_full or nome_full == "NONE":
-                        continue
+                    if not nome_full or nome_full == "NONE": continue
                     partes = nome_full.split()
                     primeiro = partes[0] if partes else nome_full
                     resto = " ".join(partes[1:]) if len(partes)>1 else ""
@@ -104,6 +82,22 @@ def atualizar_confirmacao_na_base(chapa):
         return True
     except: return False
 
+def apagar_chapa_da_base(chapa_alvo):
+    try:
+        chapa_alvo = str(chapa_alvo).strip().zfill(6)
+        with open(ARQ_HE, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        antes = len(rows)
+        rows_filtradas = [r for r in rows if str(r.get("chapa","")).strip().zfill(6) != chapa_alvo]
+        depois = len(rows_filtradas)
+        with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
+            w=csv.DictWriter(f, fieldnames=["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
+            w.writeheader(); w.writerows(rows_filtradas)
+        return antes - depois
+    except Exception as e:
+        print(f"Erro apagar chapa: {e}")
+        return -1
+
 def montar_calendario(ano, mes):
     calendar.setfirstweekday(calendar.SUNDAY)
     hoje=datetime.date.today(); limite_futuro=hoje+datetime.timedelta(days=1); limite_passado=hoje-datetime.timedelta(days=7)
@@ -128,26 +122,30 @@ def montar_calendario(ano, mes):
 
 app_flask=Flask(__name__)
 @app_flask.route('/')
-def home(): return "BOT ON - 8578 FUNCIONARIOS CARREGADOS - CORRIGIDO"
+def home(): return "BOT ON - 8578 FUNC - FINAL"
 
 @app_flask.route('/base')
 def ver_base():
     inicio=request.args.get('inicio',''); fim=request.args.get('fim',''); chapa_f=request.args.get('chapa',''); status_f=request.args.get('status','')
     html=f"""
-    <style>body{{font-family:Arial;padding:15px}} table{{border-collapse:collapse;width:100%;font-size:12px}} th{{background:#111;color:white;padding:8px}} td{{padding:6px;border:1px solid #ccc;text-transform:uppercase}} .btn{{padding:8px 15px;text-decoration:none;border-radius:5px;margin-right:8px;color:white;display:inline-block;font-size:13px}} .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}} .btn-orange{{background:#fd7e14}} .pendente{{background:#f8d7da}} .confirmado{{background:#d4edda}} .nao{{background:#e2e3e5}}</style>
-    <h2>base horas extra bho - CONTROLE INTERVALO - BASE CORRIGIDA</h2>
+    <style>body{{font-family:Arial;padding:15px}} table{{border-collapse:collapse;width:100%;font-size:12px}} th{{background:#111;color:white;padding:8px}} td{{padding:6px;border:1px solid #ccc;text-transform:uppercase}} .btn{{padding:8px 15px;text-decoration:none;border-radius:5px;margin-right:8px;color:white;display:inline-block;font-size:13px}} .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}} .btn-orange{{background:#fd7e14}} .pendente{{background:#f8d7da}} .confirmado{{background:#d4edda}} .nao{{background:#e2e3e5}} .trash{{background:#ff4444;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;font-size:11px}}</style>
+    <h2>base horas extra bho</h2>
     <form method="get" style="margin-bottom:15px">
       Data Inicial: <input type="date" name="inicio" value="{inicio}"> Data Final: <input type="date" name="fim" value="{fim}"> 
       CHAPA: <input type="text" name="chapa" value="{chapa_f}" size=8>
       Status: <select name="status"><option value="">TODOS</option><option value="PENDENTE" {'selected' if status_f=='PENDENTE' else ''}>PENDENTE</option><option value="CONFIRMADO" {'selected' if status_f=='CONFIRMADO' else ''}>CONFIRMADO</option></select>
       <button class="btn btn-blue" type="submit">Filtrar</button> <a href="/base">Limpar</a>
     </form>
-    <div style="margin-bottom:15px"><a href="/exportar" class="btn btn-green">📥 Extrair Base</a> <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Limpar TODA a base?')">🗑️ Limpar Base</a> <a href="/base?status=PENDENTE" class="btn btn-orange">⚠️ Ver só PENDENTES</a> <a href="/funcionarios" class="btn btn-blue">👥 Ver Base Mestra</a></div>
+    <div style="margin-bottom:15px"><a href="/exportar" class="btn btn-green">📥 Extrair Base</a> <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Limpar TODA a base?')">🗑️ Limpar Base TODA</a> <a href="/base?status=PENDENTE" class="btn btn-orange">⚠️ Ver só PENDENTES</a> <a href="/funcionarios" class="btn btn-blue">👥 Ver Base Mestra</a></div>
     """
     if request.args.get('limpar')=='1':
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
-        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base limpa!</div>"
+        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base toda limpa!</div>"
+    if request.args.get('apagar_chapa'):
+        chapa_del = request.args.get('apagar_chapa')
+        qtd = apagar_chapa_da_base(chapa_del)
+        html+=f"<div style='background:#f8d7da;padding:10px;border:1px solid red;margin-bottom:15px'>✅ Chapa {chapa_del} apagada! {qtd} registros removidos.</div>"
     total_min=0; total_reg=0; pendentes=0; linhas=[]
     try:
         with open(ARQ_HE, encoding="utf-8") as f:
@@ -170,19 +168,19 @@ def ver_base():
     except Exception as e: html+=f"Erro: {e}<br>"
     th=int(total_min//60); tm=int(total_min%60)
     html+=f"<b>Total: {total_reg} | Pendentes: {pendentes} | Horas: {th:02d}:{tm:02d}</b><br><br>"
-    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Total</th><th>Status Intervalo</th><th>Confirmação</th></tr>"
+    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Total</th><th>Status</th><th>Confirmação</th><th>AÇÃO</th></tr>"
     for r in reversed(linhas[-500:]):
         nome_site = f"{r.get('nome','')} {r.get('sobrenome','')}".upper()
         st=r.get('status_intervalo',''); classe='pendente' if st=='PENDENTE' else 'confirmado' if st=='CONFIRMADO' else 'nao'
-        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('total_horas','')}</td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td></tr>"
+        ch = r.get('chapa','')
+        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{ch}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('total_horas','')}</td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td><td><a class='trash' href='/base?apagar_chapa={ch}' onclick=\"return confirm('Apagar TODOS os registros da chapa {ch}?')\">🗑️ Apagar</a></td></tr>"
     html+="</table>"; return html
 
 @app_flask.route('/funcionarios')
 def ver_func(): 
     try:
         with open(ARQ_FUNC, encoding="utf-8-sig") as f:
-            primeira = f.readline()
-            f.seek(0)
+            primeira = f.readline(); f.seek(0)
             delim = ";" if ";" in primeira else ","
             reader = csv.DictReader(f, delimiter=delim)
             if reader.fieldnames:
@@ -190,16 +188,13 @@ def ver_func():
             chapa_col = "chapa" if "chapa" in reader.fieldnames else reader.fieldnames[0]
             nome_col = "nome_completo" if "nome_completo" in reader.fieldnames else ("funcionario" if "funcionario" in reader.fieldnames else reader.fieldnames[1])
             rows = list(reader)
-        
-        html = f"<h2>Base Mestra - {len(rows)} funcionários - CORRIGIDA</h2><table><tr><th>CHAPA</th><th>NOME COMPLETO</th></tr>"
+        html = f"<h2>Base Mestra - {len(rows)} funcionários</h2><table><tr><th>CHAPA</th><th>NOME COMPLETO</th></tr>"
         for r in rows[:1000]:
-            ch = r.get(chapa_col, "")
-            nm = r.get(nome_col, "")
+            ch = r.get(chapa_col, ""); nm = r.get(nome_col, "")
             if ch.lower() != "none" and nm.lower() != "none":
                 html+=f"<tr><td>{ch}</td><td>{nm}</td></tr>"
         return html+"</table>"
-    except Exception as e: 
-        return f"Erro: {e}<br>Fieldnames: {reader.fieldnames if 'reader' in locals() else 'erro'}"
+    except Exception as e: return f"Erro: {e}"
 
 @app_flask.route('/exportar')
 def exportar(): return send_file(ARQ_HE, as_attachment=True, download_name="base_horas_extra_bho.csv")
@@ -208,24 +203,28 @@ def run_flask(): app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 1
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text("Olá! Envie sua CHAPA (6 dígitos)"); return CHAPA
 
 async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chapa=update.message.text.strip()
-    if not (chapa.isdigit() and len(chapa)<=6): await update.message.reply_text("CHAPA inválida. 6 dígitos:"); return CHAPA
-    chapa = chapa.zfill(6)
-    context.user_data["chapa"]=chapa
-    achou = buscar_nome_na_base_mestra(chapa)
-    if achou:
-        nome, sobrenome, completo = achou
-        context.user_data["nome"]=nome
-        context.user_data["sobrenome"]=sobrenome
-        context.user_data["telefone"]="BASE_MESTRA"
-        salvar_cadastro(chapa, nome, sobrenome, "BASE_MESTRA", str(update.effective_user.id))
-        await update.message.reply_text(f"✅ CHAPA ENCONTRADA:\n👤 {completo}\n\nAgora envie o BA (7 dígitos):")
-        return BA
-    cad=buscar_cadastro(chapa)
-    if cad: 
-        context.user_data.update(cad)
-        await update.message.reply_text(f"Bem vindo {cad['nome']}! Envie BA 7 dígitos:"); return BA
-    await update.message.reply_text(f"Chapa {chapa} não encontrada na base mestra.\nDigite seu NOME:"); return NOME
+    try:
+        chapa_raw=update.message.text.strip()
+        if not chapa_raw.isdigit(): await update.message.reply_text("CHAPA inválida. Só números, 6 dígitos:"); return CHAPA
+        chapa=chapa_raw.zfill(6)
+        context.user_data["chapa"]=chapa
+        achou=None
+        try: achou=buscar_nome_na_base_mestra(chapa)
+        except: achou=None
+        if achou:
+            nome,sobrenome,completo=achou
+            context.user_data["nome"]=nome; context.user_data["sobrenome"]=sobrenome; context.user_data["telefone"]="BASE_MESTRA"
+            try: salvar_cadastro(chapa,nome,sobrenome,"BASE_MESTRA",str(update.effective_user.id))
+            except: pass
+            await update.message.reply_text(f"✅ CHAPA ENCONTRADA:\n👤 {completo}\nChapa {chapa}\n\nAgora envie o BA (7 dígitos):")
+            return BA
+        cad=buscar_cadastro(chapa)
+        if cad: 
+            context.user_data.update(cad)
+            await update.message.reply_text(f"Bem vindo {cad['nome']}! Envie BA 7 dígitos:"); return BA
+        await update.message.reply_text(f"Chapa {chapa} não encontrada na base mestra.\nDigite seu NOME:"); return NOME
+    except Exception as e:
+        await update.message.reply_text(f"Chapa {update.message.text} não encontrada. Digite seu NOME:"); return NOME
 
 async def nome_step(update: Update, context: ContextTypes.DEFAULT_TYPE): context.user_data["nome"]=update.message.text.strip().upper(); await update.message.reply_text("Sobrenome:"); return SOBRENOME
 async def sobrenome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -287,7 +286,15 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm}\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", total_hhmm, status_intervalo, data_confirmacao, context.user_data.get("telefone","")])
-    kb_final=InlineKeyboardMarkup([[InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],[InlineKeyboardButton(" ", callback_data="IGNORE")],[InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]])
+    
+    # === BOTÕES CHAMATIVOS NOVOS ===
+    kb_final=InlineKeyboardMarkup([
+        [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
+        [InlineKeyboardButton(" ", callback_data="IGNORE")],
+        [InlineKeyboardButton("🟩🟩🟩 ➕ CADASTRAR NOVA HE ➕ 🟩🟩🟩", callback_data="NOVA_HE")],
+        [InlineKeyboardButton("🔥👉 CLIQUE AQUI PARA LANÇAR OUTRA 👈🔥", callback_data="NOVA_HE")]
+    ])
+    
     await query.edit_message_text(mascara, reply_markup=kb_final)
     if total_minutos > 360:
         alerta = f"🚨🚨🚨 ATENÇÃO {nome} 🚨🚨🚨\n\n⚠️ Não esqueça da inclusão do INTERVALO REFEIÇÃO no RH."
@@ -314,8 +321,26 @@ async def reset_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data=="RESET_CONFIRM":
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
-        await query.edit_message_text("✅ BASE APAGADA!")
+        await query.edit_message_text("✅ BASE TODA APAGADA!")
     else: await query.edit_message_text("❌ Cancelado")
+async def reset_chapa_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid=str(update.effective_user.id)
+    if ADMIN_ID and uid!=ADMIN_ID: await update.message.reply_text("⛔ Você não é ADM!"); return
+    if not context.args:
+        await update.message.reply_text("Use assim:\n/reset_chapa 062289")
+        return
+    chapa=context.args[0].strip().zfill(6)
+    kb=InlineKeyboardMarkup([[InlineKeyboardButton(f"🗑️ SIM, APAGAR CHAPA {chapa}", callback_data=f"RESET_CHAPA_{chapa}")],[InlineKeyboardButton("❌ Cancelar", callback_data="RESET_CHAPA_CANCEL")]])
+    await update.message.reply_text(f"⚠️ ADM: Apagar TODOS os registros da chapa {chapa}?", reply_markup=kb)
+async def reset_chapa_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query=update.callback_query; await query.answer(); uid=str(query.from_user.id)
+    if ADMIN_ID and uid!=ADMIN_ID: await query.edit_message_text("⛔ Sem permissão"); return
+    if query.data=="RESET_CHAPA_CANCEL": await query.edit_message_text("❌ Cancelado"); return
+    if query.data.startswith("RESET_CHAPA_"):
+        chapa=query.data.replace("RESET_CHAPA_","")
+        qtd=apagar_chapa_da_base(chapa)
+        if qtd>=0: await query.edit_message_text(f"✅ CHAPA {chapa} APAGADA! {qtd} registros removidos.")
+        else: await query.edit_message_text(f"❌ Erro ao apagar chapa {chapa}")
 async def nova_he_cb(update: Update, context: ContextTypes.DEFAULT_TYPE): query=update.callback_query; await query.answer(); await query.message.reply_text("Envie o BA 7 dígitos:"); return BA
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text("Cancelado. /start"); return ConversationHandler.END
 
@@ -336,10 +361,14 @@ def main():
                 }, fallbacks=[CommandHandler("cancel", cancel)],
             )
             app.add_handler(conv)
-            app.add_handler(CommandHandler("id", id_cmd)); app.add_handler(CommandHandler("reset_base", reset_base_cmd))
-            app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_")); app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
+            app.add_handler(CommandHandler("id", id_cmd))
+            app.add_handler(CommandHandler("reset_base", reset_base_cmd))
+            app.add_handler(CommandHandler("reset_chapa", reset_chapa_cmd))
+            app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
+            app.add_handler(CallbackQueryHandler(reset_chapa_cb, pattern="^RESET_CHAPA_"))
+            app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
             app.add_handler(CallbackQueryHandler(confirma_intervalo_cb, pattern="^CONFIRMA_INTERVALO"))
-            print(">>> BOT FINAL CORRIGIDO - 8578 FUNC - SEM ERRO NONE"); app.run_polling(drop_pending_updates=True)
+            print(">>> BOT FINAL - TUDO OK"); app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
 if __name__=="__main__": main()
