@@ -1,6 +1,7 @@
-import sqlite3
+import os, sqlite3, threading
 from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont
+from flask import Flask
 from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, filters, CallbackQueryHandler
 from telegram.request import HTTPXRequest
@@ -9,6 +10,11 @@ TOKEN = "8962498308:AAFzBUN4uChTXnXdPXmIKszLlMRvVkpn2Kg"
 DB_PATH = "colaboradores.db"
 CHAPA, NOME, SOBRENOME, TELEFONE, BA, DATA_INI, SEL_HORA_INI_H, SEL_HORA_INI_M, PERG_VIRADA, SEL_HORA_FIM_H, SEL_HORA_FIM_M = range(11)
 ADM_CHAPA = "062289"
+
+app_flask = Flask(__name__)
+@app_flask.route('/')
+def home(): return "Bot HE_TIME_BHO online 24h"
+def run_flask(): app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 def init_db():
     conn=sqlite3.connect(DB_PATH); cur=conn.cursor()
@@ -56,8 +62,10 @@ def relogio_minutos():
 async def reset_cmd(u,c):
     conn=sqlite3.connect(DB_PATH); cur=conn.cursor(); cur.execute("SELECT chapa FROM cadastro WHERE telegram_id=?", (u.effective_user.id,)); row=cur.fetchone()
     if not row or row[0]!=ADM_CHAPA:
-        cur.execute("SELECT COUNT(*) FROM cadastro"); count=cur.fetchone()[0] if cur.fetchone else 0
-        if count>0: await u.message.reply_text("❌ Só ADM 062289"); conn.close(); return
+        cur.execute("SELECT COUNT(*) FROM cadastro"); 
+        try: cnt=cur.fetchone()[0]
+        except: cnt=0
+        if cnt>0: await u.message.reply_text("❌ Só ADM 062289"); conn.close(); return
     conn.close(); kb=InlineKeyboardMarkup([[InlineKeyboardButton("✅ SIM, APAGAR TUDO", callback_data="reset_sim")],[InlineKeyboardButton("❌ NÃO", callback_data="reset_nao")]])
     await u.message.reply_text(f"⚠️ ADM {ADM_CHAPA}\nAPAGAR TUDO?", reply_markup=kb)
 
@@ -129,9 +137,11 @@ async def sel_hora_fim_m(u,c):
 async def cancel(u,c): await u.message.reply_text("Cancelado", reply_markup=ReplyKeyboardRemove()); return ConversationHandler.END
 
 def main():
+    threading.Thread(target=run_flask, daemon=True).start()
     init_db(); request=HTTPXRequest(connect_timeout=30, read_timeout=30, pool_timeout=30)
     app=ApplicationBuilder().token(TOKEN).request(request).build()
     app.add_handler(CommandHandler("reset", reset_cmd)); app.add_handler(CallbackQueryHandler(reset_confirm, pattern="^reset_"))
     conv=ConversationHandler(entry_points=[CommandHandler("start",start)], states={CHAPA:[MessageHandler(filters.TEXT & ~filters.COMMAND,r_chapa)],NOME:[MessageHandler(filters.TEXT & ~filters.COMMAND,r_nome)],SOBRENOME:[MessageHandler(filters.TEXT & ~filters.COMMAND,r_sobrenome)],TELEFONE:[MessageHandler(filters.TEXT | filters.CONTACT, r_tel)],BA:[MessageHandler(filters.TEXT & ~filters.COMMAND,r_ba)],DATA_INI:[CallbackQueryHandler(r_data_ini)],SEL_HORA_INI_H:[CallbackQueryHandler(sel_hora_ini_h)],SEL_HORA_INI_M:[CallbackQueryHandler(sel_hora_ini_m)],PERG_VIRADA:[CallbackQueryHandler(perg_virada)],SEL_HORA_FIM_H:[CallbackQueryHandler(sel_hora_fim_h)],SEL_HORA_FIM_M:[CallbackQueryHandler(sel_hora_fim_m)],}, fallbacks=[CommandHandler("cancel",cancel)])
-    app.add_handler(conv); print(f"Bot 24h KOYEB rodando... ADM {ADM_CHAPA}"); app.run_polling()
+    app.add_handler(conv); print(f"Bot 24h WEB rodando... ADM {ADM_CHAPA}"); app.run_polling()
+
 if __name__=="__main__": main()
