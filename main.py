@@ -122,7 +122,7 @@ def montar_calendario(ano, mes):
 
 app_flask=Flask(__name__)
 @app_flask.route('/')
-def home(): return "BOT ON - FINAL COM RESET WEB"
+def home(): return "BOT ON - FINAL COM TELEFONE"
 
 @app_flask.route('/base')
 def ver_base():
@@ -142,8 +142,8 @@ def ver_base():
       <a href="/base?status=PENDENTE" class="btn btn-orange">⚠️ Ver só PENDENTES</a> 
       <a href="/funcionarios" class="btn btn-blue">👥 Ver Base Mestra</a><br><br>
       <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Apagar TODA a base de HORAS?')">🗑️ Limpar Base de Horas</a> 
-      <a href="/base?limpar_cadastros=1" class="btn btn-purple" onclick="return confirm('RESET DE CADASTROS: Obrigar TODOS a cadastrar de novo?')">👤 Reset Cadastros - Obriga todos cadastrar</a>
-      <a href="/base?limpar_tudo=1" class="btn btn-black" onclick="return confirm('💥 APAGAR TUDO: horas + cadastros?')">💥 RESET GERAL - Apaga Tudo</a>
+      <a href="/base?limpar_cadastros=1" class="btn btn-purple" onclick="return confirm('RESET DE CADASTROS: Obrigar TODOS a cadastrar de novo?')">👤 Reset Cadastros</a>
+      <a href="/base?limpar_tudo=1" class="btn btn-black" onclick="return confirm('💥 APAGAR TUDO: horas + cadastros?')">💥 RESET GERAL</a>
     </div>
     """
     if request.args.get('limpar')=='1':
@@ -186,12 +186,12 @@ def ver_base():
     except Exception as e: html+=f"Erro: {e}<br>"
     th=int(total_min//60); tm=int(total_min%60)
     html+=f"<b>Total: {total_reg} | Pendentes: {pendentes} | Horas: {th:02d}:{tm:02d}</b><br><br>"
-    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th><th>Status</th><th>Confirmação</th><th>AÇÃO</th></tr>"
+    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>Telefone</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th><th>Status</th><th>Confirmação</th><th>AÇÃO</th></tr>"
     for r in reversed(linhas[-500:]):
         nome_site = f"{r.get('nome','')} {r.get('sobrenome','')}".upper()
         st=r.get('status_intervalo',''); classe='pendente' if st=='PENDENTE' else 'confirmado' if st=='CONFIRMADO' else 'nao'
-        ch = r.get('chapa','')
-        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{ch}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td><b>{r.get('total_horas','')}</b></td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td><td><a class='trash' href='/base?apagar_chapa={ch}' onclick=\"return confirm('Apagar TODOS os registros da chapa {ch}?')\">🗑️ APAGAR CHAPA</a></td></tr>"
+        ch = r.get('chapa',''); tel = r.get('telefone','')
+        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{ch}</td><td>{nome_site}</td><td>{tel}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td><b>{r.get('total_horas','')}</b></td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td><td><a class='trash' href='/base?apagar_chapa={ch}' onclick=\"return confirm('Apagar TODOS os registros da chapa {ch}?')\">🗑️ APAGAR</a></td></tr>"
     html+="</table>"; return html
 
 @app_flask.route('/funcionarios')
@@ -226,22 +226,25 @@ async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not chapa_raw.isdigit(): await update.message.reply_text("CHAPA inválida. Só números, 6 dígitos:"); return CHAPA
         chapa=chapa_raw.zfill(6)
         context.user_data["chapa"]=chapa
+        # 1 - verifica cadastro já feito (já tem telefone)
+        cad=buscar_cadastro(chapa)
+        if cad and cad.get("telefone") and cad.get("telefone")!="BASE_MESTRA" and cad.get("telefone")!="":
+            context.user_data.update(cad)
+            await update.message.reply_text(f"Bem vindo {cad['nome']}! Envie BA 7 dígitos:"); return BA
+        # 2 - busca na base mestra mas AGORA PEDE TELEFONE
         achou=None
         try: achou=buscar_nome_na_base_mestra(chapa)
         except: achou=None
         if achou:
             nome,sobrenome,completo=achou
-            context.user_data["nome"]=nome; context.user_data["sobrenome"]=sobrenome; context.user_data["telefone"]="BASE_MESTRA"
-            try: salvar_cadastro(chapa,nome,sobrenome,"BASE_MESTRA",str(update.effective_user.id))
-            except: pass
-            await update.message.reply_text(f"✅ CHAPA ENCONTRADA:\n👤 {completo}\nChapa {chapa}\n\nAgora envie o BA (7 dígitos):")
-            return BA
-        cad=buscar_cadastro(chapa)
-        if cad: 
-            context.user_data.update(cad)
-            await update.message.reply_text(f"Bem vindo {cad['nome']}! Envie BA 7 dígitos:"); return BA
+            context.user_data["nome"]=nome; context.user_data["sobrenome"]=sobrenome
+            kb=[[KeyboardButton("📱 Compartilhar telefone", request_contact=True)]]
+            await update.message.reply_text(f"✅ CHAPA ENCONTRADA:\n👤 {completo}\nChapa {chapa}\n\nAgora compartilhe seu TELEFONE:", reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True))
+            return TELEFONE
+        # 3 - não achou em lugar nenhum, pede nome
         await update.message.reply_text(f"Chapa {chapa} não encontrada na base mestra.\nDigite seu NOME:"); return NOME
     except Exception as e:
+        print(e)
         await update.message.reply_text(f"Chapa {update.message.text} não encontrada. Digite seu NOME:"); return NOME
 
 async def nome_step(update: Update, context: ContextTypes.DEFAULT_TYPE): context.user_data["nome"]=update.message.text.strip().upper(); await update.message.reply_text("Sobrenome:"); return SOBRENOME
@@ -251,7 +254,8 @@ async def sobrenome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def telefone_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tel=update.message.contact.phone_number if update.message.contact else update.message.text.strip(); context.user_data["telefone"]=tel
     salvar_cadastro(context.user_data["chapa"], context.user_data["nome"], context.user_data["sobrenome"], tel, str(update.effective_user.id))
-    await update.message.reply_text(f"✅ Salvo! {context.user_data['nome']} {context.user_data['sobrenome']}\nAgora BA 7 dígitos:", reply_markup={"remove_keyboard": True}); return BA
+    await update.message.reply_text(f"✅ Salvo! {context.user_data['nome']} {context.user_data['sobrenome']} - Tel: {tel}\nAgora BA 7 dígitos:", reply_markup={"remove_keyboard": True}); return BA
+
 async def ba_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ba=update.message.text.strip()
     if not (ba.isdigit() and len(ba)==7): await update.message.reply_text("BA inválido! 7 dígitos:"); return BA
@@ -301,7 +305,7 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hora_fim = context.user_data.get("hora_fim",""); min_fim = context.user_data.get("min_fim","")
     status_intervalo = "PENDENTE" if total_minutos > 360 else "NÃO NECESSÁRIO"
     data_confirmacao = ""
-    mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm}\n"
+    mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm}\n📱 Tel: {context.user_data.get('telefone','')}\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", total_hhmm, status_intervalo, data_confirmacao, context.user_data.get("telefone","")])
     kb_final=InlineKeyboardMarkup([
@@ -383,7 +387,7 @@ def main():
             app.add_handler(CallbackQueryHandler(reset_chapa_cb, pattern="^RESET_CHAPA_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
             app.add_handler(CallbackQueryHandler(confirma_intervalo_cb, pattern="^CONFIRMA_INTERVALO"))
-            print(">>> BOT FINAL COM RESET WEB"); app.run_polling(drop_pending_updates=True)
+            print(">>> BOT FINAL COM TELEFONE"); app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
 if __name__=="__main__": main()
