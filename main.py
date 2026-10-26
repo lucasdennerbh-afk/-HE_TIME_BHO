@@ -10,7 +10,7 @@ ARQ_HE = "base.csv"
 
 for arq, header in [
     (ARQ_CAD, ["chapa","nome","sobrenome","telefone","id_telegram"]),
-    (ARQ_HE, ["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","telefone"])
+    (ARQ_HE, ["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","total_hhmm","telefone"])
 ]:
     if not os.path.exists(arq):
         with open(arq, "w", newline="", encoding="utf-8") as f:
@@ -88,7 +88,7 @@ def ver_base():
     .btn{{padding:8px 15px; text-decoration:none; border-radius:5px; margin-right:8px; color:white; display:inline-block; font-size:13px; border:none; cursor:pointer}}
     .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}}
     </style>
-    <h2 style="font-weight:normal">base horas extra bho</h2>
+    <h2>base horas extra bho</h2>
     <form method="get" style="margin-bottom:15px">
       Data Inicial: <input type="date" name="inicio" value="{inicio}"> 
       Data Final: <input type="date" name="fim" value="{fim}"> 
@@ -97,14 +97,13 @@ def ver_base():
     </form>
     <div style="margin-bottom:15px">
       <a href="/exportar" class="btn btn-green">📥 Extrair Base</a>
-      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Tem certeza que quer LIMPAR TODA A BASE?')">🗑️ Limpar Base</a>
+      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Limpar TODA a base?')">🗑️ Limpar Base</a>
     </div>
     """
     if request.args.get('limpar')=='1':
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","telefone"])
-        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base limpa com sucesso!</div>"
-
+            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","total_hhmm","telefone"])
+        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base limpa!</div>"
     total_h=0; total_reg=0; linhas=[]
     try:
         with open(ARQ_HE, encoding="utf-8") as f:
@@ -120,12 +119,11 @@ def ver_base():
                 try: total_h+=float(str(r.get("total_horas","0")).replace(",","."))
                 except: pass
     except Exception as e: html+=f"Erro: {e}<br>"
-    
     html+=f"<b>Total: {total_reg} | Horas: {total_h:.2f}h</b><br><br>"
-    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome Completo</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th></tr>"
+    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total HH:MM</th><th>Total Decimal</th></tr>"
     for r in reversed(linhas[-500:]):
         nome_site = f"{r.get('nome','')} {r.get('sobrenome','')}".upper()
-        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_horas','')}</td></tr>"
+        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_hhmm','')}</td><td>{r.get('total_horas','')}</td></tr>"
     html+="</table>"
     return html
 
@@ -177,7 +175,7 @@ async def calendario_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def hora_ini_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); context.user_data["hora_ini"]=query.data.replace("HINI_","")
     kb=[[InlineKeyboardButton(f"{m:02d} min", callback_data=f"MINI_{m:02d}") for m in [0,10,20,30,40,50]]]
-    await query.edit_message_text(f"Hora: {context.user_data['hora_ini']}h\nMinutos (10 em 10):", reply_markup=InlineKeyboardMarkup(kb)); return MIN_INI
+    await query.edit_message_text(f"Hora: {context.user_data['hora_ini']}h\nMinutos:", reply_markup=InlineKeyboardMarkup(kb)); return MIN_INI
 
 async def min_ini_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); context.user_data["min_ini"]=query.data.replace("MINI_","")
@@ -192,13 +190,10 @@ async def virada_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["data_fim"]=(d_ini+datetime.timedelta(days=1)).strftime("%d/%m/%Y")
     else:
         context.user_data["data_fim"]=context.user_data["data_inicio"]
-    botoes=[]
-    linha=[]
+    botoes=[]; linha=[]
     for h in range(24):
         linha.append(InlineKeyboardButton(f"{h:02d}:00", callback_data=f"HFIM_{h:02d}"))
-        if len(linha)==4:
-            botoes.append(linha)
-            linha=[]
+        if len(linha)==4: botoes.append(linha); linha=[]
     if linha: botoes.append(linha)
     await query.edit_message_text(f"Data Fim: {context.user_data['data_fim']}\nHora FINAL:", reply_markup=InlineKeyboardMarkup(botoes))
     return HORA_FIM
@@ -207,29 +202,48 @@ async def hora_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer()
     context.user_data["hora_fim"]=query.data.replace("HFIM_","")
     kb=[[InlineKeyboardButton(f"{m:02d} min", callback_data=f"MINF_{m:02d}") for m in [0,10,20,30,40,50]]]
-    await query.edit_message_text(f"Hora final: {context.user_data['hora_fim']}h\nMinutos (10 em 10):", reply_markup=InlineKeyboardMarkup(kb))
+    await query.edit_message_text(f"Hora final: {context.user_data['hora_fim']}h\nMinutos:", reply_markup=InlineKeyboardMarkup(kb))
     return MIN_FIM
 
 async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query; await query.answer(); context.user_data["min_fim"]=query.data.replace("MINF_","")
+    query=update.callback_query; await query.answer()
+    context.user_data["min_fim"]=query.data.replace("MINF_","")
     try:
         di=datetime.datetime.strptime(f"{context.user_data['data_inicio']} {context.user_data['hora_ini']}:{context.user_data['min_ini']}", "%d/%m/%Y %H:%M")
         df=datetime.datetime.strptime(f"{context.user_data['data_fim']} {context.user_data['hora_fim']}:{context.user_data['min_fim']}", "%d/%m/%Y %H:%M")
-        total=(df-di).total_seconds()/3600
-        if total<=0: total+=24
-    except: total=0
-    context.user_data["total"]=f"{total:.2f}"
+        diff_seg = (df - di).total_seconds()
+        if diff_seg <= 0: diff_seg += 24*3600
+        total_decimal = diff_seg / 3600
+        horas = int(diff_seg // 3600)
+        minutos = int((diff_seg % 3600) // 60)
+        total_hhmm = f"{horas:02d}:{minutos:02d}"
+    except:
+        total_decimal = 0
+        total_hhmm = "00:00"
+
     nome = context.user_data.get("nome","").upper()
     sobrenome = context.user_data.get("sobrenome","").upper()
-    mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {context.user_data['chapa']}\n📋 BA: {context.user_data['ba']}\n📅 Data Início: {context.user_data['data_inicio']}\n📅 Data Fim: {context.user_data['data_fim']}\n⏰ Hora Inicial: {context.user_data['hora_ini']}:{context.user_data['min_ini']}\n⏰ Hora Final: {context.user_data['hora_fim']}:{context.user_data['min_fim']}\n⏱️ Total: {context.user_data['total']}h\n"
+    chapa = context.user_data.get("chapa","")
+    ba = context.user_data.get("ba","")
+    data_ini = context.user_data.get("data_inicio","")
+    data_fim = context.user_data.get("data_fim","")
+    hora_ini = context.user_data.get("hora_ini","")
+    min_ini = context.user_data.get("min_ini","")
+    hora_fim = context.user_data.get("hora_fim","")
+    min_fim = context.user_data.get("min_fim","")
+
+    mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm} ({total_decimal:.2f}h)\n"
+
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
-        csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), context.user_data["chapa"], nome, sobrenome, context.user_data["ba"], context.user_data["data_inicio"], context.user_data["data_fim"], f"{context.user_data['hora_ini']}:{context.user_data['min_ini']}", f"{context.user_data['hora_fim']}:{context.user_data['min_fim']}", context.user_data["total"], context.user_data.get("telefone","")])
+        csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", f"{total_decimal:.2f}", total_hhmm, context.user_data.get("telefone","")])
+
     kb_final=InlineKeyboardMarkup([
         [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
         [InlineKeyboardButton(" ", callback_data="IGNORE")],
         [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
     ])
-    await query.edit_message_text(mascara, reply_markup=kb_final); return BA
+    await query.edit_message_text(mascara, reply_markup=kb_final)
+    return BA
 
 async def id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Seu ID é: {update.effective_user.id}")
@@ -246,7 +260,7 @@ async def reset_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ADMIN_ID and uid!=ADMIN_ID: await query.edit_message_text("⛔ Sem permissão"); return
     if query.data=="RESET_CONFIRM":
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","telefone"])
+            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","total_hhmm","telefone"])
         await query.edit_message_text("✅ BASE APAGADA!")
     else: await query.edit_message_text("❌ Cancelado")
 
@@ -283,7 +297,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT ENCAMINHAR TELEGRAM")
+            print(">>> BOT FINAL CORRETO 07:10")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
