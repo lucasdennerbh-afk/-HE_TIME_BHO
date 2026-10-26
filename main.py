@@ -122,26 +122,44 @@ def montar_calendario(ano, mes):
 
 app_flask=Flask(__name__)
 @app_flask.route('/')
-def home(): return "BOT ON - 8578 FUNC - FINAL"
+def home(): return "BOT ON - FINAL COM RESET WEB"
 
 @app_flask.route('/base')
 def ver_base():
     inicio=request.args.get('inicio',''); fim=request.args.get('fim',''); chapa_f=request.args.get('chapa',''); status_f=request.args.get('status','')
     html=f"""
-    <style>body{{font-family:Arial;padding:15px}} table{{border-collapse:collapse;width:100%;font-size:12px}} th{{background:#111;color:white;padding:8px}} td{{padding:6px;border:1px solid #ccc;text-transform:uppercase}} .btn{{padding:8px 15px;text-decoration:none;border-radius:5px;margin-right:8px;color:white;display:inline-block;font-size:13px}} .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}} .btn-orange{{background:#fd7e14}} .pendente{{background:#f8d7da}} .confirmado{{background:#d4edda}} .nao{{background:#e2e3e5}} .trash{{background:#ff4444;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;font-size:11px}}</style>
-    <h2>base horas extra bho</h2>
+    <style>body{{font-family:Arial;padding:15px}} table{{border-collapse:collapse;width:100%;font-size:11px}} th{{background:#111;color:white;padding:6px;white-space:nowrap}} td{{padding:5px;border:1px solid #ccc;text-transform:uppercase;white-space:nowrap}} .btn{{padding:8px 15px;text-decoration:none;border-radius:5px;margin-right:8px;color:white;display:inline-block;font-size:13px;margin-bottom:5px}} .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}} .btn-orange{{background:#fd7e14}} .btn-purple{{background:#6f42c1}} .btn-black{{background:#000}} .pendente{{background:#f8d7da}} .confirmado{{background:#d4edda}} .nao{{background:#e2e3e5}} .trash{{background:#ff4444;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;font-size:11px}}</style>
+    <h2>base horas extra bho - PAINEL ADM</h2>
     <form method="get" style="margin-bottom:15px">
       Data Inicial: <input type="date" name="inicio" value="{inicio}"> Data Final: <input type="date" name="fim" value="{fim}"> 
       CHAPA: <input type="text" name="chapa" value="{chapa_f}" size=8>
       Status: <select name="status"><option value="">TODOS</option><option value="PENDENTE" {'selected' if status_f=='PENDENTE' else ''}>PENDENTE</option><option value="CONFIRMADO" {'selected' if status_f=='CONFIRMADO' else ''}>CONFIRMADO</option></select>
-      <button class="btn btn-blue" type="submit">Filtrar</button> <a href="/base">Limpar</a>
+      <button class="btn btn-blue" type="submit">Filtrar</button> <a href="/base">Limpar filtro</a>
     </form>
-    <div style="margin-bottom:15px"><a href="/exportar" class="btn btn-green">📥 Extrair Base</a> <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Limpar TODA a base?')">🗑️ Limpar Base TODA</a> <a href="/base?status=PENDENTE" class="btn btn-orange">⚠️ Ver só PENDENTES</a> <a href="/funcionarios" class="btn btn-blue">👥 Ver Base Mestra</a></div>
+    <div style="margin-bottom:15px; border:2px solid #ccc; padding:10px;">
+      <b>AÇÕES ADM:</b><br><br>
+      <a href="/exportar" class="btn btn-green">📥 Extrair Base</a> 
+      <a href="/base?status=PENDENTE" class="btn btn-orange">⚠️ Ver só PENDENTES</a> 
+      <a href="/funcionarios" class="btn btn-blue">👥 Ver Base Mestra</a><br><br>
+      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Apagar TODA a base de HORAS?')">🗑️ Limpar Base de Horas</a> 
+      <a href="/base?limpar_cadastros=1" class="btn btn-purple" onclick="return confirm('RESET DE CADASTROS: Obrigar TODOS a cadastrar de novo?')">👤 Reset Cadastros - Obriga todos cadastrar</a>
+      <a href="/base?limpar_tudo=1" class="btn btn-black" onclick="return confirm('💥 APAGAR TUDO: horas + cadastros?')">💥 RESET GERAL - Apaga Tudo</a>
+    </div>
     """
     if request.args.get('limpar')=='1':
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
-        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base toda limpa!</div>"
+        html+="<div style='background:#d4edda;padding:10px;border:1px solid green;margin-bottom:15px'>✅ Base de HORAS limpa!</div>"
+    if request.args.get('limpar_cadastros')=='1':
+        with open(ARQ_CAD, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["chapa","nome","sobrenome","telefone","id_telegram"])
+        html+="<div style='background:#fff3cd;padding:15px;border:2px solid orange;margin-bottom:15px'><b>✅ RESET DE CADASTROS FEITO!</b><br>Todos terão que cadastrar nome/telefone novamente.</div>"
+    if request.args.get('limpar_tudo')=='1':
+        with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
+        with open(ARQ_CAD, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["chapa","nome","sobrenome","telefone","id_telegram"])
+        html+="<div style='background:#000;color:white;padding:15px;border:2px solid red;margin-bottom:15px'><b>💥 RESET GERAL FEITO!</b><br>Bot zerado!</div>"
     if request.args.get('apagar_chapa'):
         chapa_del = request.args.get('apagar_chapa')
         qtd = apagar_chapa_da_base(chapa_del)
@@ -168,12 +186,12 @@ def ver_base():
     except Exception as e: html+=f"Erro: {e}<br>"
     th=int(total_min//60); tm=int(total_min%60)
     html+=f"<b>Total: {total_reg} | Pendentes: {pendentes} | Horas: {th:02d}:{tm:02d}</b><br><br>"
-    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Total</th><th>Status</th><th>Confirmação</th><th>AÇÃO</th></tr>"
+    html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th><th>Status</th><th>Confirmação</th><th>AÇÃO</th></tr>"
     for r in reversed(linhas[-500:]):
         nome_site = f"{r.get('nome','')} {r.get('sobrenome','')}".upper()
         st=r.get('status_intervalo',''); classe='pendente' if st=='PENDENTE' else 'confirmado' if st=='CONFIRMADO' else 'nao'
         ch = r.get('chapa','')
-        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{ch}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('total_horas','')}</td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td><td><a class='trash' href='/base?apagar_chapa={ch}' onclick=\"return confirm('Apagar TODOS os registros da chapa {ch}?')\">🗑️ Apagar</a></td></tr>"
+        html+=f"<tr class='{classe}'><td>{r.get('data_registro','')}</td><td>{ch}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td><b>{r.get('total_horas','')}</b></td><td><b>{st}</b></td><td>{r.get('data_confirmacao','')}</td><td><a class='trash' href='/base?apagar_chapa={ch}' onclick=\"return confirm('Apagar TODOS os registros da chapa {ch}?')\">🗑️ APAGAR CHAPA</a></td></tr>"
     html+="</table>"; return html
 
 @app_flask.route('/funcionarios')
@@ -286,15 +304,12 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {chapa}\n📋 BA: {ba}\n📅 Data Início: {data_ini}\n📅 Data Fim: {data_fim}\n⏰ Hora Inicial: {hora_ini}:{min_ini}\n⏰ Hora Final: {hora_fim}:{min_fim}\n⏱️ Total: {total_hhmm}\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", total_hhmm, status_intervalo, data_confirmacao, context.user_data.get("telefone","")])
-    
-    # === BOTÕES CHAMATIVOS NOVOS ===
     kb_final=InlineKeyboardMarkup([
         [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
         [InlineKeyboardButton(" ", callback_data="IGNORE")],
         [InlineKeyboardButton("🟩🟩🟩 ➕ CADASTRAR NOVA HE ➕ 🟩🟩🟩", callback_data="NOVA_HE")],
         [InlineKeyboardButton("🔥👉 CLIQUE AQUI PARA LANÇAR OUTRA 👈🔥", callback_data="NOVA_HE")]
     ])
-    
     await query.edit_message_text(mascara, reply_markup=kb_final)
     if total_minutos > 360:
         alerta = f"🚨🚨🚨 ATENÇÃO {nome} 🚨🚨🚨\n\n⚠️ Não esqueça da inclusão do INTERVALO REFEIÇÃO no RH."
@@ -368,7 +383,7 @@ def main():
             app.add_handler(CallbackQueryHandler(reset_chapa_cb, pattern="^RESET_CHAPA_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
             app.add_handler(CallbackQueryHandler(confirma_intervalo_cb, pattern="^CONFIRMA_INTERVALO"))
-            print(">>> BOT FINAL - TUDO OK"); app.run_polling(drop_pending_updates=True)
+            print(">>> BOT FINAL COM RESET WEB"); app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
 if __name__=="__main__": main()
