@@ -1,4 +1,4 @@
-import os, threading, time, csv, datetime, calendar
+import os, threading, time, csv, datetime, calendar, urllib.parse
 from flask import Flask, request, send_file
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
@@ -27,6 +27,8 @@ def buscar_cadastro(chapa):
     return None
 
 def salvar_cadastro(chapa, nome, sobrenome, telefone, tid):
+    nome = nome.strip().upper()
+    sobrenome = sobrenome.strip().upper()
     rows=[]
     try:
         with open(ARQ_CAD, encoding="utf-8") as f:
@@ -82,7 +84,7 @@ def ver_base():
     body{{font-family:Arial;padding:15px}}
     table{{border-collapse:collapse;width:100%;font-size:13px}}
     th{{background:#111;color:white;padding:8px}}
-    td{{padding:6px;border:1px solid #ccc}}
+    td{{padding:6px;border:1px solid #ccc; text-transform:uppercase}}
     .btn{{padding:8px 15px; text-decoration:none; border-radius:5px; margin-right:8px; color:white; display:inline-block; font-size:13px; border:none; cursor:pointer}}
     .btn-green{{background:#28a745}} .btn-red{{background:#dc3545}} .btn-blue{{background:#007bff}}
     </style>
@@ -122,7 +124,8 @@ def ver_base():
     html+=f"<b>Total: {total_reg} | Horas: {total_h:.2f}h</b><br><br>"
     html+="<table><tr><th>Data Reg</th><th>Chapa</th><th>Nome Completo</th><th>BA</th><th>Data Início</th><th>Data Fim</th><th>Hora Início</th><th>Hora Fim</th><th>Total</th></tr>"
     for r in reversed(linhas[-500:]):
-        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{r.get('nome','')} {r.get('sobrenome','')}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_horas','')}</td></tr>"
+        nome_site = f"{r.get('nome','')} {r.get('sobrenome','')}".upper()
+        html+=f"<tr><td>{r.get('data_registro','')}</td><td>{r.get('chapa','')}</td><td>{nome_site}</td><td>{r.get('ba','')}</td><td>{r.get('data_inicio','')}</td><td>{r.get('data_fim','')}</td><td>{r.get('hora_inicio','')}</td><td>{r.get('hora_fim','')}</td><td>{r.get('total_horas','')}</td></tr>"
     html+="</table>"
     return html
 
@@ -144,11 +147,11 @@ async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Seu NOME:"); return NOME
 
 async def nome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["nome"]=update.message.text.strip()
+    context.user_data["nome"]=update.message.text.strip().upper()
     await update.message.reply_text("Sobrenome:"); return SOBRENOME
 
 async def sobrenome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["sobrenome"]=update.message.text.strip()
+    context.user_data["sobrenome"]=update.message.text.strip().upper()
     kb=[[KeyboardButton("📱 Compartilhar telefone", request_contact=True)]]
     await update.message.reply_text("Compartilhe telefone:", reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)); return TELEFONE
 
@@ -181,7 +184,6 @@ async def min_ini_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb=[[InlineKeyboardButton("SIM - é virada", callback_data="VIRADA_SIM"), InlineKeyboardButton("NÃO - mesmo dia", callback_data="VIRADA_NAO")]]
     await query.edit_message_text(f"Início: {context.user_data['data_inicio']} {context.user_data['hora_ini']}:{context.user_data['min_ini']}\nÉ VIRADA?", reply_markup=InlineKeyboardMarkup(kb)); return VIRADA
 
-# --- VIRADA CORRIGIDA ---
 async def virada_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer()
     is_virada = query.data=="VIRADA_SIM"
@@ -190,7 +192,6 @@ async def virada_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["data_fim"]=(d_ini+datetime.timedelta(days=1)).strftime("%d/%m/%Y")
     else:
         context.user_data["data_fim"]=context.user_data["data_inicio"]
-    # Todas as 24 horas, 4 por linha
     botoes=[]
     linha=[]
     for h in range(24):
@@ -218,11 +219,18 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if total<=0: total+=24
     except: total=0
     context.user_data["total"]=f"{total:.2f}"
-    nome=context.user_data.get("nome",""); sobrenome=context.user_data.get("sobrenome","")
+    nome = context.user_data.get("nome","").upper()
+    sobrenome = context.user_data.get("sobrenome","").upper()
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {context.user_data['chapa']}\n📋 BA: {context.user_data['ba']}\n📅 Data Início: {context.user_data['data_inicio']}\n📅 Data Fim: {context.user_data['data_fim']}\n⏰ Hora Inicial: {context.user_data['hora_ini']}:{context.user_data['min_ini']}\n⏰ Hora Final: {context.user_data['hora_fim']}:{context.user_data['min_fim']}\n⏱️ Total: {context.user_data['total']}h\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), context.user_data["chapa"], nome, sobrenome, context.user_data["ba"], context.user_data["data_inicio"], context.user_data["data_fim"], f"{context.user_data['hora_ini']}:{context.user_data['min_ini']}", f"{context.user_data['hora_fim']}:{context.user_data['min_fim']}", context.user_data["total"], context.user_data.get("telefone","")])
-    kb_final=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]])
+    texto_share = urllib.parse.quote(mascara)
+    url_whatsapp = f"https://wa.me/?text={texto_share}"
+    kb_final=InlineKeyboardMarkup([
+        [InlineKeyboardButton("📤 Compartilhar máscara", url=url_whatsapp)],
+        [InlineKeyboardButton(" ", callback_data="IGNORE")],
+        [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
+    ])
     await query.edit_message_text(mascara, reply_markup=kb_final); return BA
 
 async def id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -277,7 +285,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT FINAL CORRIGIDO")
+            print(">>> BOT FINAL MAIUSCULO")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
