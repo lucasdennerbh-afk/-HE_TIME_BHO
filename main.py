@@ -77,7 +77,6 @@ def home(): return "BOT ON"
 @app_flask.route('/base')
 def ver_base():
     inicio=request.args.get('inicio',''); fim=request.args.get('fim',''); chapa_f=request.args.get('chapa','')
-    
     html=f"""
     <style>
     body{{font-family:Arial;padding:15px}}
@@ -96,7 +95,7 @@ def ver_base():
     </form>
     <div style="margin-bottom:15px">
       <a href="/exportar" class="btn btn-green">📥 Extrair Base</a>
-      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Tem certeza que quer LIMPAR TODA A BASE? Essa ação não tem volta!')">🗑️ Limpar Base</a>
+      <a href="/base?limpar=1" class="btn btn-red" onclick="return confirm('Tem certeza que quer LIMPAR TODA A BASE?')">🗑️ Limpar Base</a>
     </div>
     """
     if request.args.get('limpar')=='1':
@@ -182,24 +181,40 @@ async def min_ini_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb=[[InlineKeyboardButton("SIM - é virada", callback_data="VIRADA_SIM"), InlineKeyboardButton("NÃO - mesmo dia", callback_data="VIRADA_NAO")]]
     await query.edit_message_text(f"Início: {context.user_data['data_inicio']} {context.user_data['hora_ini']}:{context.user_data['min_ini']}\nÉ VIRADA?", reply_markup=InlineKeyboardMarkup(kb)); return VIRADA
 
+# --- VIRADA CORRIGIDA ---
 async def virada_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query; await query.answer(); is_virada=query.data=="VIRADA_SIM"
-    if is_virada: d_ini=datetime.datetime.strptime(context.user_data["data_inicio"], "%d/%m/%Y"); context.user_data["data_fim"]=(d_ini+datetime.timedelta(days=1)).strftime("%d/%m/%Y")
-    else: context.user_data["data_fim"]=context.user_data["data_inicio"]
-    kb=[]; [kb.append([InlineKeyboardButton(f"{h:02d}:00", callback_data=f"HFIM_{h:02d}")]) for h in range(0,24)]
-    await query.edit_message_text(f"Data Fim: {context.user_data['data_fim']}\nHora FINAL:", reply_markup=InlineKeyboardMarkup(kb[:18])); return HORA_FIM
+    query=update.callback_query; await query.answer()
+    is_virada = query.data=="VIRADA_SIM"
+    d_ini = datetime.datetime.strptime(context.user_data["data_inicio"], "%d/%m/%Y")
+    if is_virada:
+        context.user_data["data_fim"]=(d_ini+datetime.timedelta(days=1)).strftime("%d/%m/%Y")
+    else:
+        context.user_data["data_fim"]=context.user_data["data_inicio"]
+    # Todas as 24 horas, 4 por linha
+    botoes=[]
+    linha=[]
+    for h in range(24):
+        linha.append(InlineKeyboardButton(f"{h:02d}:00", callback_data=f"HFIM_{h:02d}"))
+        if len(linha)==4:
+            botoes.append(linha)
+            linha=[]
+    if linha: botoes.append(linha)
+    await query.edit_message_text(f"Data Fim: {context.user_data['data_fim']}\nHora FINAL:", reply_markup=InlineKeyboardMarkup(botoes))
+    return HORA_FIM
 
 async def hora_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query; await query.answer(); context.user_data["hora_fim"]=query.data.replace("HFIM_","")
+    query=update.callback_query; await query.answer()
+    context.user_data["hora_fim"]=query.data.replace("HFIM_","")
     kb=[[InlineKeyboardButton(f"{m:02d} min", callback_data=f"MINF_{m:02d}") for m in [0,10,20,30,40,50]]]
-    await query.edit_message_text("Minutos FINAL (10 em 10):", reply_markup=InlineKeyboardMarkup(kb)); return MIN_FIM
+    await query.edit_message_text(f"Hora final: {context.user_data['hora_fim']}h\nMinutos (10 em 10):", reply_markup=InlineKeyboardMarkup(kb))
+    return MIN_FIM
 
 async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); context.user_data["min_fim"]=query.data.replace("MINF_","")
     try:
         di=datetime.datetime.strptime(f"{context.user_data['data_inicio']} {context.user_data['hora_ini']}:{context.user_data['min_ini']}", "%d/%m/%Y %H:%M")
         df=datetime.datetime.strptime(f"{context.user_data['data_fim']} {context.user_data['hora_fim']}:{context.user_data['min_fim']}", "%d/%m/%Y %H:%M")
-        total=(df-di).total_seconds()/3600; 
+        total=(df-di).total_seconds()/3600
         if total<=0: total+=24
     except: total=0
     context.user_data["total"]=f"{total:.2f}"
@@ -262,7 +277,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT FINAL")
+            print(">>> BOT FINAL CORRIGIDO")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
