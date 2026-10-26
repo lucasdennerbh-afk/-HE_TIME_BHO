@@ -1,4 +1,4 @@
-import os, threading, time, csv, datetime, calendar
+import os, threading, time, csv, datetime, calendar, re
 from flask import Flask, request, send_file
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
@@ -54,6 +54,19 @@ def buscar_cadastro(chapa):
                 if r["chapa"] == chapa: return r
     except: pass
     return None
+
+def formatar_telefone(tel_raw):
+    if not tel_raw: return ""
+    nums = re.sub(r'\D', '', str(tel_raw))
+    if nums.startswith('55') and len(nums) > 11:
+        nums = nums[2:]
+    if len(nums) > 11:
+        nums = nums[-11:]
+    if len(nums) < 10:
+        return nums
+    ddd = nums[:2]
+    numero = nums[2:]
+    return f"{ddd}-{numero}"
 
 def salvar_cadastro(chapa, nome, sobrenome, telefone, tid):
     nome = nome.strip().upper(); sobrenome = sobrenome.strip().upper()
@@ -122,7 +135,7 @@ def montar_calendario(ano, mes):
 
 app_flask=Flask(__name__)
 @app_flask.route('/')
-def home(): return "BOT ON - FINAL COM TELEFONE"
+def home(): return "BOT ON - FINAL TELEFONE DD-NUMERO"
 
 @app_flask.route('/base')
 def ver_base():
@@ -153,13 +166,13 @@ def ver_base():
     if request.args.get('limpar_cadastros')=='1':
         with open(ARQ_CAD, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["chapa","nome","sobrenome","telefone","id_telegram"])
-        html+="<div style='background:#fff3cd;padding:15px;border:2px solid orange;margin-bottom:15px'><b>✅ RESET DE CADASTROS FEITO!</b><br>Todos terão que cadastrar nome/telefone novamente.</div>"
+        html+="<div style='background:#fff3cd;padding:15px;border:2px solid orange;margin-bottom:15px'><b>✅ RESET DE CADASTROS FEITO!</b></div>"
     if request.args.get('limpar_tudo')=='1':
         with open(ARQ_HE, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["data_registro","chapa","nome","sobrenome","ba","data_inicio","data_fim","hora_inicio","hora_fim","total_horas","status_intervalo","data_confirmacao","telefone"])
         with open(ARQ_CAD, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["chapa","nome","sobrenome","telefone","id_telegram"])
-        html+="<div style='background:#000;color:white;padding:15px;border:2px solid red;margin-bottom:15px'><b>💥 RESET GERAL FEITO!</b><br>Bot zerado!</div>"
+        html+="<div style='background:#000;color:white;padding:15px;border:2px solid red;margin-bottom:15px'><b>💥 RESET GERAL FEITO!</b></div>"
     if request.args.get('apagar_chapa'):
         chapa_del = request.args.get('apagar_chapa')
         qtd = apagar_chapa_da_base(chapa_del)
@@ -226,12 +239,10 @@ async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not chapa_raw.isdigit(): await update.message.reply_text("CHAPA inválida. Só números, 6 dígitos:"); return CHAPA
         chapa=chapa_raw.zfill(6)
         context.user_data["chapa"]=chapa
-        # 1 - verifica cadastro já feito (já tem telefone)
         cad=buscar_cadastro(chapa)
         if cad and cad.get("telefone") and cad.get("telefone")!="BASE_MESTRA" and cad.get("telefone")!="":
             context.user_data.update(cad)
             await update.message.reply_text(f"Bem vindo {cad['nome']}! Envie BA 7 dígitos:"); return BA
-        # 2 - busca na base mestra mas AGORA PEDE TELEFONE
         achou=None
         try: achou=buscar_nome_na_base_mestra(chapa)
         except: achou=None
@@ -241,7 +252,6 @@ async def chapa_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb=[[KeyboardButton("📱 Compartilhar telefone", request_contact=True)]]
             await update.message.reply_text(f"✅ CHAPA ENCONTRADA:\n👤 {completo}\nChapa {chapa}\n\nAgora compartilhe seu TELEFONE:", reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True))
             return TELEFONE
-        # 3 - não achou em lugar nenhum, pede nome
         await update.message.reply_text(f"Chapa {chapa} não encontrada na base mestra.\nDigite seu NOME:"); return NOME
     except Exception as e:
         print(e)
@@ -251,10 +261,16 @@ async def nome_step(update: Update, context: ContextTypes.DEFAULT_TYPE): context
 async def sobrenome_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["sobrenome"]=update.message.text.strip().upper(); kb=[[KeyboardButton("📱 Compartilhar telefone", request_contact=True)]]
     await update.message.reply_text("Compartilhe telefone:", reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)); return TELEFONE
+
 async def telefone_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tel=update.message.contact.phone_number if update.message.contact else update.message.text.strip(); context.user_data["telefone"]=tel
+    tel_raw = update.message.contact.phone_number if update.message.contact else update.message.text.strip()
+    tel = formatar_telefone(tel_raw)
+    if len(re.sub(r'\D','',tel)) < 10:
+        await update.message.reply_text("Telefone inválido! Envie com DDD, ex: 31-987859173 ou compartilhe o contato:")
+        return TELEFONE
+    context.user_data["telefone"]=tel
     salvar_cadastro(context.user_data["chapa"], context.user_data["nome"], context.user_data["sobrenome"], tel, str(update.effective_user.id))
-    await update.message.reply_text(f"✅ Salvo! {context.user_data['nome']} {context.user_data['sobrenome']} - Tel: {tel}\nAgora BA 7 dígitos:", reply_markup={"remove_keyboard": True}); return BA
+    await update.message.reply_text(f"✅ Salvo! {context.user_data['nome']} {context.user_data['sobrenome']}\n📱 Tel: {tel}\nAgora BA 7 dígitos:", reply_markup={"remove_keyboard": True}); return BA
 
 async def ba_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ba=update.message.text.strip()
@@ -387,7 +403,7 @@ def main():
             app.add_handler(CallbackQueryHandler(reset_chapa_cb, pattern="^RESET_CHAPA_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
             app.add_handler(CallbackQueryHandler(confirma_intervalo_cb, pattern="^CONFIRMA_INTERVALO"))
-            print(">>> BOT FINAL COM TELEFONE"); app.run_polling(drop_pending_updates=True)
+            print(">>> BOT FINAL DD-NUMERO"); app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
 if __name__=="__main__": main()
