@@ -122,8 +122,6 @@ def ver_base():
                     if ":" in th:
                         h,m=map(int,th.split(":"))
                         total_min+=h*60+m
-                    else:
-                        total_min+=float(th)*60
                 except: pass
     except Exception as e: html+=f"Erro: {e}<br>"
     th=int(total_min//60); tm=int(total_min%60)
@@ -245,30 +243,26 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), chapa, nome, sobrenome, ba, data_ini, data_fim, f"{hora_ini}:{min_ini}", f"{hora_fim}:{min_fim}", total_hhmm, context.user_data.get("telefone","")])
 
-    if total_minutos > 360:
-        mascara += f"\n\n🚨🚨🚨 ATENÇÃO 🚨🚨🚨\n\n⚠️ NÃO ESQUEÇA DA INCLUSÃO DO INTERVALO REFEIÇÃO NO RH.\n⚠️ NÃO ESQUEÇA DA INCLUSÃO DO INTERVALO REFEIÇÃO NO RH.\n"
-        kb_final=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ ESTOU CIENTE - INCLUÍ O INTERVALO", callback_data="CONFIRMA_INTERVALO")],
-            [InlineKeyboardButton(" ", callback_data="IGNORE")],
-            [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
-            [InlineKeyboardButton(" ", callback_data="IGNORE")],
-            [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
-        ])
-    else:
-        kb_final=InlineKeyboardMarkup([
-            [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
-            [InlineKeyboardButton(" ", callback_data="IGNORE")],
-            [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
-        ])
+    kb_final=InlineKeyboardMarkup([
+        [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
+        [InlineKeyboardButton(" ", callback_data="IGNORE")],
+        [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
+    ])
     
     await query.edit_message_text(mascara, reply_markup=kb_final)
+
+    if total_minutos > 360:
+        alerta = f"🚨🚨🚨 ATENÇÃO {nome} 🚨🚨🚨\n\n⚠️ Não esqueça da inclusão do INTERVALO REFEIÇÃO no RH."
+        kb_alerta = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ ESTOU CIENTE - INCLUÍ O INTERVALO", callback_data="CONFIRMA_INTERVALO")]
+        ])
+        await query.message.reply_text(alerta, reply_markup=kb_alerta)
+
     return BA
 
 async def confirma_intervalo_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer()
-    await query.message.reply_text(
-        "✅ Confirmado com sucesso!\n\nVocê confirmou que está ciente da inclusão do INTERVALO REFEIÇÃO no RH.\n\nObrigado! Pode encaminhar seu registro agora. 👆"
-    )
+    await query.edit_message_text("✅ Confirmado com sucesso!\n\nVocê confirmou que está ciente da inclusão do INTERVALO REFEIÇÃO no RH.\n\nObrigado!")
 
 async def id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Seu ID é: {update.effective_user.id}")
@@ -323,7 +317,7 @@ def main():
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
             app.add_handler(CallbackQueryHandler(confirma_intervalo_cb, pattern="^CONFIRMA_INTERVALO$"))
-            print(">>> BOT FINAL COM ALERTA DESTACADO")
+            print(">>> BOT FINAL ALERTA SEPARADO")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
