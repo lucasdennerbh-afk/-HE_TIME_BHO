@@ -1,65 +1,55 @@
-import os, json, threading, time
+import os, threading, time, csv, datetime
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import datetime
 
 TOKEN = os.environ.get("BOT_TOKEN")
-SHEET_ID = os.environ.get("SHEET_ID", "1hPBH4M1yJEbJdKpm6jXmZu-N7RA7-x0Tm6CY7sXl2YE")
-GOOGLE_CREDS = os.environ.get("GOOGLE_CREDENTIALS")
+ARQ = "base.csv"
 
-sheet = None
-try:
-    if GOOGLE_CREDS and SHEET_ID:
-        import gspread
-        creds_dict = json.loads(GOOGLE_CREDS)
-        gc = gspread.service_account_from_dict(creds_dict)
-        sheet = gc.open_by_key(SHEET_ID).sheet1
-        print(">>> PLANILHA OK")
-except Exception as e:
-    print(f"Planilha off: {e}")
+# Cria base se não existe
+if not os.path.exists(ARQ):
+    with open(ARQ, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow(["data", "id", "nome", "chapa"])
 
 app_flask = Flask(__name__)
+
 @app_flask.route('/')
-def home(): return "OK"
+def home(): return "BOT ON"
+
 @app_flask.route('/base')
 def ver_base():
-    if not sheet: return "Planilha não conectada"
-    rows = sheet.get_all_values()
-    html = "<h2>Base AO VIVO</h2><table border=1>"
-    for r in rows[-200:][::-1]:
-        html+=f"<tr><td>{'</td><td>'.join(r)}</td></tr>"
-    return html+"</table>"
+    html = "<h2>BASE HE - AO VIVO</h2><table border=1><tr><th>Data</th><th>ID</th><th>Nome</th><th>Chapa</th></tr>"
+    try:
+        with open(ARQ, encoding="utf-8") as f:
+            linhas = list(csv.reader(f))[1:]
+            for r in reversed(linhas[-200:]):
+                if len(r)>=4:
+                    html+=f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td></tr>"
+    except:
+        html+="<tr><td colspan=4>Vazia ainda</td></tr>"
+    return html+"</table><br><a href='/base'>Atualizar</a>"
 
 def run_flask():
     app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
-def salvar_fundo(agora, tid, nome, chapa):
-    try:
-        sheet.append_row([agora, tid, nome, chapa])
-    except Exception as e:
-        print(f"Erro fundo: {e}")
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Manda a CHAPA 6 dígitos:")
+    await update.message.reply_text("✅ Bot ON!\nManda a CHAPA 6 dígitos:")
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await update.message.reply_text("🔄 Reset! Manda a CHAPA:")
+    await update.message.reply_text("🔄 Reset! Manda a chapa:")
 
 async def chapa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
     if not (texto.isdigit() and len(texto)==6):
+        await update.message.reply_text("❌ Manda 6 números ex: 062289")
         return
-    # RESPONDE NA HORA - não espera planilha
-    await update.message.reply_text(f"✅ Chapa {texto} recebida! Salvando...")
-    
-    # salva em segundo plano
-    if sheet:
-        agora = datetime.datetime.now().strftime("%d/%m %H:%M:%S")
-        tid = str(update.effective_user.id)
-        nome = update.effective_user.first_name or ""
-        threading.Thread(target=salvar_fundo, args=(agora, tid, nome, texto), daemon=True).start()
+    agora = datetime.datetime.now().strftime("%d/%m %H:%M:%S")
+    tid = update.effective_user.id
+    nome = update.effective_user.first_name or ""
+    with open(ARQ, "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([agora, tid, nome, texto])
+    await update.message.reply_text(f"✅ Chapa {texto} salva!\nVeja em: https://he-time-bho.onrender.com/base")
 
 async def post_init(app):
     await app.bot.delete_webhook(drop_pending_updates=True)
@@ -72,7 +62,7 @@ def main():
             app.add_handler(CommandHandler("start", start))
             app.add_handler(CommandHandler("reset", reset))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chapa))
-            print(">>> BOT RAPIDO")
+            print(">>> BOT BASE LOCAL")
             app.run_polling(drop_pending_updates=True, close_loop=False)
         except Exception as e:
             print(e); time.sleep(5)
