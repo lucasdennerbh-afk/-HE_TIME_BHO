@@ -1,4 +1,4 @@
-import os, threading, time, csv, datetime, calendar, urllib.parse
+import os, threading, time, csv, datetime, calendar
 from flask import Flask, request, send_file
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
@@ -224,10 +224,8 @@ async def min_fim_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mascara=f"✅ REGISTRO CONFIRMADO\n\n👤 {nome} {sobrenome}\n🪪 Chapa: {context.user_data['chapa']}\n📋 BA: {context.user_data['ba']}\n📅 Data Início: {context.user_data['data_inicio']}\n📅 Data Fim: {context.user_data['data_fim']}\n⏰ Hora Inicial: {context.user_data['hora_ini']}:{context.user_data['min_ini']}\n⏰ Hora Final: {context.user_data['hora_fim']}:{context.user_data['min_fim']}\n⏱️ Total: {context.user_data['total']}h\n"
     with open(ARQ_HE, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), context.user_data["chapa"], nome, sobrenome, context.user_data["ba"], context.user_data["data_inicio"], context.user_data["data_fim"], f"{context.user_data['hora_ini']}:{context.user_data['min_ini']}", f"{context.user_data['hora_fim']}:{context.user_data['min_fim']}", context.user_data["total"], context.user_data.get("telefone","")])
-    texto_share = urllib.parse.quote(mascara)
-    url_whatsapp = f"https://wa.me/?text={texto_share}"
     kb_final=InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Compartilhar máscara", url=url_whatsapp)],
+        [InlineKeyboardButton("↗️ Encaminhar no Telegram", switch_inline_query=mascara)],
         [InlineKeyboardButton(" ", callback_data="IGNORE")],
         [InlineKeyboardButton("➕ Cadastrar nova HE", callback_data="NOVA_HE")]
     ])
@@ -285,7 +283,7 @@ def main():
             app.add_handler(CommandHandler("reset_base", reset_base_cmd))
             app.add_handler(CallbackQueryHandler(reset_cb, pattern="^RESET_"))
             app.add_handler(CallbackQueryHandler(nova_he_cb, pattern="^NOVA_HE$"))
-            print(">>> BOT FINAL MAIUSCULO")
+            print(">>> BOT ENCAMINHAR TELEGRAM")
             app.run_polling(drop_pending_updates=True)
         except Exception as e: print(f"CRASH: {e}"); time.sleep(5)
 
